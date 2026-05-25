@@ -7,60 +7,56 @@ import { parseHeader } from '../../src/utils/header.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIX = join(__dirname, '..', 'fixtures');
 
-describe('parseHeader', () => {
-  it('parses the real minimal-3-task.xer fixture into the 8 canonical fields', () => {
-    const xer = readFileSync(join(FIX, 'minimal-3-task.xer'), 'utf-8');
+describe('parseHeader — canonical Python 5-field shape', () => {
+  it('extracts the 5 ERMHDR fields plus raw', () => {
+    const xer = 'ERMHDR\t24.12\t2024-01-15\tadmin\tdbxApiXmlExport\tUSD\n%T\tPROJECT';
     const h = parseHeader(xer);
-    expect(h).not.toBeNull();
-    expect(h.version).toBeTruthy();
-    expect(h.exportDate).toBeTruthy();
-    expect(h.exportScope).toBeTruthy();
-    expect(h.user).toBeTruthy();
-    expect(h.userFullName).toBeTruthy();
-    expect(h.database).toBeTruthy();
-    expect(h.module).toBeTruthy();
-    expect(h.currency).toBeTruthy();
-    // Verify NO fabricated fields exist
-    expect(h.language).toBeUndefined();
-    expect(h.encoding).toBeUndefined();
-    expect(h.userLogin).toBeUndefined();
-  });
-
-  it('extracts known values from a constructed ERMHDR line', () => {
-    const xer = 'ERMHDR\t24.12\t2026-01-15\tProject\tdana\tDana Fitkowski\tdbx\tProject Management\tUSD\n%T\tPROJECT';
-    expect(parseHeader(xer)).toEqual({
+    expect(h).toEqual({
+      raw: ['ERMHDR', '24.12', '2024-01-15', 'admin', 'dbxApiXmlExport', 'USD'],
       version: '24.12',
-      exportDate: '2026-01-15',
-      exportScope: 'Project',
-      user: 'dana',
-      userFullName: 'Dana Fitkowski',
-      database: 'dbx',
-      module: 'Project Management',
+      export_date: '2024-01-15',
+      user: 'admin',
+      database: 'dbxApiXmlExport',
       currency: 'USD'
     });
   });
 
-  it('returns null when no ERMHDR is present', () => {
-    expect(parseHeader('%T\tPROJECT\n')).toBeNull();
+  it('parses the real minimal-3-task.xer fixture', () => {
+    const xer = readFileSync(join(FIX, 'minimal-3-task.xer'), 'utf-8');
+    const h = parseHeader(xer);
+    expect(h).not.toBeNull();
+    expect(h.version).toBeTruthy();
+    expect(h.export_date).toBeTruthy();
+    // Verify NO invented fields
+    expect(h.exportScope).toBeUndefined();
+    expect(h.userFullName).toBeUndefined();
+    expect(h.module).toBeUndefined();
+    expect(h.language).toBeUndefined();
+    expect(h.encoding).toBeUndefined();
   });
 
-  it('handles CRLF line endings', () => {
-    const xer = 'ERMHDR\t24.12\t2026-01-15\tProject\tdana\tDana\tdbx\tProject Management\tUSD\r\n%T\tPROJECT';
-    expect(parseHeader(xer).version).toBe('24.12');
+  it('returns null for non-ERMHDR input', () => {
+    expect(parseHeader('%T\tPROJECT\n')).toBeNull();
   });
 
   it('returns null for empty input', () => {
     expect(parseHeader('')).toBeNull();
   });
 
-  it('returns null for ERMHDR without a tab (malformed)', () => {
-    expect(parseHeader('ERMHDR\n%T\tPROJECT')).toBeNull();
+  it('handles CRLF line endings', () => {
+    const xer = 'ERMHDR\t24.12\t2024-01-15\tadmin\tdbx\tUSD\r\n%T\tPROJECT';
+    expect(parseHeader(xer).version).toBe('24.12');
   });
 
-  it('strips a UTF-8 BOM at the start of the file', () => {
-    const xer = '﻿ERMHDR\t24.12\t2026-01-15\tProject\tdana\tDana\tdbx\tProject Management\tUSD\n';
-    // For now, BOM at start would cause null. If a real XER has BOM we'll address in a follow-up.
-    // This test documents the current limitation; flip it to .toBeTruthy() once BOM stripping is added.
-    expect(parseHeader(xer)).toBeNull();
+  it('handles short ERMHDR (missing trailing fields)', () => {
+    const xer = 'ERMHDR\t24.12\t2024-01-15\n%T\tPROJECT';
+    expect(parseHeader(xer)).toEqual({
+      raw: ['ERMHDR', '24.12', '2024-01-15'],
+      version: '24.12',
+      export_date: '2024-01-15',
+      user: '',
+      database: '',
+      currency: ''
+    });
   });
 });

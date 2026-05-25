@@ -1,0 +1,20 @@
+ERMHDR	24.12	2026-05-09 08:00	Project	admin	Test Admin	dbxTest	Project Management	CAD
+%T	PROJECT
+%F	proj_id	proj_short_name	last_recalc_date	plan_start_date	plan_end_date	proj_url
+%R	PROJ1	TEST-PROJ	2026-05-01 00:00	2026-01-01 00:00	2026-12-31 00:00
+%T	PROJWBS
+%F	wbs_id	parent_wbs_id	wbs_name	proj_id
+%R	W1		Root WBS	PROJ1
+%T	CALENDAR
+%F	clndr_id	clndr_name	day_hr_cnt	week_hr_cnt	clndr_data
+%R	C1	5-Day	8	40
+%T	TASK
+%F	task_id	task_code	task_name	proj_id	wbs_id	clndr_id	status_code	task_type	phys_complete_pct	target_drtn_hr_cnt	remain_drtn_hr_cnt	total_float_hr_cnt	target_start_date	target_end_date	act_start_date	act_end_date	early_start_date	early_end_date	driving_path_flag	cstr_type
+%R	T1	TASK-A	Activity A	PROJ1	W1	C1	TK_Complete	TT_Task	100	40	0	0	2026-01-01 08:00	2026-01-31 16:00	2026-01-05 08:00	2026-01-10 16:00	2026-01-05 08:00	2026-01-10 16:00	N
+%R	T2	TASK-B	Activity B	PROJ1	W1	C1	TK_Active	TT_Task	50	80	40	0	2026-01-01 08:00	2026-01-31 16:00	2026-01-11 08:00		2026-01-11 08:00		N
+%R	T3	TASK-C	Activity C	PROJ1	W1	C1	TK_NotStart	TT_Task	0	40	40	0	2026-01-01 08:00	2026-01-31 16:00				N
+%T	TASKPRED
+%F	task_pred_id	task_id	pred_task_id	pred_type	lag_hr_cnt
+%R	P1	T2	T1	PR_FS	0
+%R	P2	T3	T2	PR_FS	0
+%E

@@ -1,0 +1,24 @@
+{
+  "name": "@criticalpathpartners/lens-parser",
+  "version": "0.1.0",
+  "description": "Primavera P6 XER and XML parser/writer for the browser. Companion to cpp-cpm-engine.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:parity": "vitest run tests/parity",
+    "build": "node scripts/bundle.mjs"
+  },
+  "devDependencies": {
+    "vitest": "^1.5.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/danafitkowski/cpp-lens-parser.git"
+  }
+}

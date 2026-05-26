@@ -11,3 +11,8 @@ export {
   subtractWorkDays,
   durationHoursToDays,
 } from './derived/calendars.js';
+export { buildWbsMap } from './derived/wbs-map.js';
+export { buildPredecessorMap } from './derived/predecessors.js';
+export { buildResourceMap } from './derived/resources.js';
+export { buildActivityCodeMap } from './derived/activity-codes.js';
+export { buildUdfMap } from './derived/udfs.js';

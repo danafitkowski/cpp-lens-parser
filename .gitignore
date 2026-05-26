@@ -3,3 +3,4 @@ dist/
 .DS_Store
 *.log
 .vitest-cache/
+tests/fixtures/large-synthetic.xer

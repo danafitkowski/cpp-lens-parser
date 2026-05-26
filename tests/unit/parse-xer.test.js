@@ -83,4 +83,15 @@ describe('parseXer end-to-end', () => {
     const m = parseXer('%T\tA\n%F\tx\n%R\t1\n', { encoding_used: 'utf-8-sig' });
     expect(m.encoding_used).toBe('utf-8-sig');
   });
+
+  it('does not populate rawText by default', () => {
+    const m = parseXer('%T\tA\n%F\tx\n%R\t1');
+    expect(m.rawText).toBeUndefined();
+  });
+
+  it('populates rawText when keepRawText is true', () => {
+    const text = '%T\tA\n%F\tx\n%R\t1';
+    const m = parseXer(text, { keepRawText: true });
+    expect(m.rawText).toBe(text);
+  });
 });

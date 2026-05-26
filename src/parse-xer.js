@@ -21,6 +21,7 @@ export function parseXer(text, opts = {}) {
   model.filename = opts.filename || '';
   model.encoding_used = opts.encoding_used || '';
   model.parse_timestamp = nowTimestamp();
+  if (opts.keepRawText) model.rawText = text;
 
   if (!text) return model;
 

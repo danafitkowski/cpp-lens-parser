@@ -441,11 +441,18 @@ export function getWorkDaysBetween(start, end, calInfo) {
 
   const { workDays, holidaySet } = _resolveCal(calInfo);
 
+  // Bound the span. A pathological pair (e.g. 0001-01-01 → 9999-12-31) is ~3.6M
+  // day-steps — a multi-second freeze. Cap at 100 years of days; no real
+  // schedule window exceeds that, and a runaway just stops counting at the cap
+  // rather than hanging.
+  const MAX_SPAN_DAYS = 366 * 100;
   let count = 0;
   let cur = s;
-  while (cur <= e) {
+  let steps = 0;
+  while (cur <= e && steps < MAX_SPAN_DAYS) {
     if (_isWorkDay(cur, workDays, holidaySet)) count++;
     cur = _addDays(cur, 1);
+    steps += 1;
   }
   return count;
 }
@@ -484,10 +491,21 @@ export function addWorkDays(start, n, calInfo) {
   const { workDays, holidaySet } = _resolveCal(calInfo);
   if (workDays.length === 0) return startDate;
 
+  // Iteration cap. work_days can be non-empty yet every reachable day blocked
+  // by holidays (a pathological / malicious calendar whose exception list
+  // covers all working weekdays) — without a cap the walk spins forever and
+  // freezes the tab/thread. The bound is generous: 14 calendar days per
+  // requested work-day (handles a once-a-fortnight calendar) plus a 100-year
+  // floor, far beyond any real schedule. If hit, the calendar has no reachable
+  // work day; we terminate and return the furthest date walked (best-effort,
+  // finite) rather than hang.
+  const maxSteps = Math.max(nWd * 14 + 366, 366 * 100);
   let cur = startDate;
   let remaining = nWd;
-  while (remaining > 0) {
+  let steps = 0;
+  while (remaining > 0 && steps < maxSteps) {
     cur = _addDays(cur, 1);
+    steps += 1;
     if (_isWorkDay(cur, workDays, holidaySet)) remaining -= 1;
   }
   return cur;
@@ -522,10 +540,15 @@ export function subtractWorkDays(end, n, calInfo) {
   const { workDays, holidaySet } = _resolveCal(calInfo);
   if (workDays.length === 0) return endDate;
 
+  // Iteration cap — see addWorkDays. Guards against a calendar whose holidays
+  // block every reachable working day, which would otherwise loop forever.
+  const maxSteps = Math.max(nWd * 14 + 366, 366 * 100);
   let cur = endDate;
   let remaining = nWd;
-  while (remaining > 0) {
+  let steps = 0;
+  while (remaining > 0 && steps < maxSteps) {
     cur = _addDays(cur, -1);
+    steps += 1;
     if (_isWorkDay(cur, workDays, holidaySet)) remaining -= 1;
   }
   return cur;

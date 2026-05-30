@@ -353,13 +353,18 @@ export function parseP6Xml(text, opts = {}) {
     db: root.getAttribute('Database') || '',
   };
 
-  // Recursively visit every descendant element. When the local name matches
-  // a known table, extract its leaf children as a record.
-  const walker = doc.createTreeWalker
-    ? doc.createTreeWalker(root, /* NodeFilter.SHOW_ELEMENT */ 0x1)
-    : null;
-
-  const visit = (el) => {
+  // Iterative depth-first walk of every descendant element. When the local
+  // name matches a known table, extract its leaf children as a record.
+  //
+  // This is deliberately ITERATIVE (explicit stack), not recursive: a deeply
+  // nested P6 XML (thousands of levels) would blow the call stack and crash
+  // with "Maximum call stack size exceeded" under a recursive visitor. An
+  // explicit stack handles arbitrary depth bounded only by heap. Children are
+  // pushed in reverse so siblings pop left-to-right, preserving document order
+  // of the extracted records.
+  const stack = [root];
+  while (stack.length) {
+    const el = stack.pop();
     const localName = el.localName || el.tagName;
     const tableName = ELEMENT_TO_TABLE[localName];
     if (tableName) {
@@ -373,17 +378,8 @@ export function parseP6Xml(text, opts = {}) {
       table.records.push(record);
       mergeFields(table, record);
     }
-    // Recurse — XML can nest table elements (e.g. <Activity> under <Project>
-    // under <APIBusinessObjects>).
-    for (const child of el.children) visit(child);
-  };
-
-  if (walker) {
-    // TreeWalker path — faster than recursion on large XML.
-    let node = walker.firstChild ? walker.currentNode : root;
-    visit(root);
-  } else {
-    visit(root);
+    const kids = el.children;
+    for (let i = kids.length - 1; i >= 0; i--) stack.push(kids[i]);
   }
 
   return model;

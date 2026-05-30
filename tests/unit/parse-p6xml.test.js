@@ -64,7 +64,7 @@ describe('parseP6Xml', () => {
     const r0 = rels[0];
     expect(r0.pred_task_id).toBe('1000');
     expect(r0.task_id).toBe('1001');
-    expect(r0.pred_type).toBe('Finish to Start');
+    expect(r0.pred_type).toBe('PR_FS'); // translated from "Finish to Start"
     expect(r0.lag_hr_cnt).toBe('0');
   });
 
@@ -111,5 +111,68 @@ describe('parseP6Xml', () => {
   it('throws on malformed XML', () => {
     expect(() => parseP6Xml('<APIBusinessObjects><unclosed></APIBusinessObjects>'))
       .toThrow(/parseP6Xml/);
+  });
+
+  // ── enum value translation (XML English → XER codes) ──────────────────────
+  // Without this, XML uploads render but silently miscount status / type /
+  // relationship / constraint, because every downstream consumer keys off
+  // XER enum codes.
+  it('translates Activity Status to XER status_code', () => {
+    const tasks = getTable(parseP6Xml(XML), 'TASK');
+    // Fixture activities are all "Not Started".
+    expect(tasks.every(t => t.status_code === 'TK_NotStart')).toBe(true);
+  });
+
+  it('translates Activity Type to XER task_type', () => {
+    const tasks = getTable(parseP6Xml(XML), 'TASK');
+    // Fixture activities are all "Task Dependent".
+    expect(tasks.every(t => t.task_type === 'TT_Task')).toBe(true);
+  });
+
+  it('translates Relationship Type to XER pred_type', () => {
+    const rels = getTable(parseP6Xml(XML), 'TASKPRED');
+    // Fixture relationships are all "Finish to Start".
+    expect(rels.every(r => r.pred_type === 'PR_FS')).toBe(true);
+  });
+
+  it('translates all status / type / relationship / constraint enums round-trip', () => {
+    const xml = `<?xml version="1.0"?>
+      <APIBusinessObjects Version="19.12" User="u" Database="d">
+        <Project><ObjectId>1</ObjectId>
+          <Activity><ObjectId>9</ObjectId><Id>M1</Id><Name>Done Task</Name>
+            <Status>Completed</Status><Type>Finish Milestone</Type>
+            <ConstraintType>Mandatory Finish</ConstraintType></Activity>
+          <Activity><ObjectId>10</ObjectId><Id>L1</Id><Name>LOE</Name>
+            <Status>In Progress</Status><Type>Level of Effort</Type>
+            <ConstraintType>Start On or After</ConstraintType></Activity>
+          <Relationship><ObjectId>20</ObjectId>
+            <PredecessorActivityObjectId>9</PredecessorActivityObjectId>
+            <SuccessorActivityObjectId>10</SuccessorActivityObjectId>
+            <Type>Start to Start</Type></Relationship>
+        </Project>
+      </APIBusinessObjects>`;
+    const m = parseP6Xml(xml);
+    const tasks = getTable(m, 'TASK');
+    const t9 = tasks.find(t => t.task_id === '9');
+    const t10 = tasks.find(t => t.task_id === '10');
+    expect(t9.status_code).toBe('TK_Complete');
+    expect(t9.task_type).toBe('TT_FinMile');
+    expect(t9.cstr_type).toBe('CS_MANDFIN');
+    expect(t10.status_code).toBe('TK_Active');
+    expect(t10.task_type).toBe('TT_LOE');
+    expect(t10.cstr_type).toBe('CS_MSOA');
+    expect(getTable(m, 'TASKPRED')[0].pred_type).toBe('PR_SS');
+  });
+
+  it('passes unrecognized enum values through unchanged (never blanks novel codes)', () => {
+    const xml = `<?xml version="1.0"?>
+      <APIBusinessObjects Version="19.12">
+        <Project><ObjectId>1</ObjectId>
+          <Activity><ObjectId>9</ObjectId><Id>X</Id><Name>X</Name>
+            <Status>Some Future P6 Status</Status></Activity>
+        </Project>
+      </APIBusinessObjects>`;
+    const t = getTable(parseP6Xml(xml), 'TASK')[0];
+    expect(t.status_code).toBe('Some Future P6 Status');
   });
 });

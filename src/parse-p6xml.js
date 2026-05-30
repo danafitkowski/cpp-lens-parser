@@ -195,6 +195,68 @@ function mapFieldName(table, xmlName) {
   return camelToSnake(xmlName);
 }
 
+// ── XML enum value → XER enum code translation ──────────────────────────────
+// P6 XML carries human-readable enum strings ("Completed", "Task Dependent",
+// "Finish to Start", "Start On"); XER — and therefore every downstream
+// consumer (DCMA checks, status counts, milestone/LOE filters, predecessor
+// maps, constraint detection) — uses coded values (TK_Complete, TT_Task,
+// PR_FS, CS_MSO). Without this translation an XML upload renders but silently
+// miscounts: zero activities recognized as complete, no milestones detected,
+// every relationship treated as a fallback FS, constraints invisible.
+//
+// Keyed by (XER field name) → { lowercased-XML-value: XER-code }. Lookup is
+// case-insensitive and whitespace-tolerant. An unrecognized value passes
+// through unchanged (never drop data — Dana's never-truncate rule), so a
+// novel P6 enum surfaces verbatim rather than being silently blanked.
+const VALUE_MAP = {
+  // Activity.Status → TASK.status_code
+  status_code: {
+    'not started': 'TK_NotStart',
+    'in progress': 'TK_Active',
+    'completed': 'TK_Complete',
+    'complete': 'TK_Complete',
+  },
+  // Activity.Type → TASK.task_type
+  task_type: {
+    'task dependent': 'TT_Task',
+    'resource dependent': 'TT_Rsrc',
+    'level of effort': 'TT_LOE',
+    'start milestone': 'TT_Mile',
+    'finish milestone': 'TT_FinMile',
+    'wbs summary': 'TT_WBS',
+  },
+  // Relationship.Type → TASKPRED.pred_type
+  pred_type: {
+    'finish to start': 'PR_FS',
+    'start to start': 'PR_SS',
+    'finish to finish': 'PR_FF',
+    'start to finish': 'PR_SF',
+  },
+  // Activity.ConstraintType / SecondaryConstraintType → cstr_type / cstr_type2
+  cstr_type: {
+    'start on': 'CS_MSO',
+    'start on or before': 'CS_MSOB',
+    'start on or after': 'CS_MSOA',
+    'finish on': 'CS_MEO',
+    'finish on or before': 'CS_MEOB',
+    'finish on or after': 'CS_MEOA',
+    'as late as possible': 'CS_ALAP',
+    'mandatory start': 'CS_MANDSTART',
+    'mandatory finish': 'CS_MANDFIN',
+  },
+};
+// cstr_type2 uses the same constraint vocabulary as cstr_type.
+VALUE_MAP.cstr_type2 = VALUE_MAP.cstr_type;
+
+function mapFieldValue(xerField, rawValue) {
+  const valueMap = VALUE_MAP[xerField];
+  if (!valueMap) return rawValue;
+  if (typeof rawValue !== 'string') return rawValue;
+  const key = rawValue.trim().toLowerCase();
+  // Pass through unrecognized values unchanged — never blank novel enums.
+  return valueMap[key] !== undefined ? valueMap[key] : rawValue;
+}
+
 function getDomParser() {
   if (typeof DOMParser !== 'undefined') return new DOMParser();
   throw new Error(
@@ -305,7 +367,7 @@ export function parseP6Xml(text, opts = {}) {
       const record = {};
       for (const xmlName of Object.keys(rawFields)) {
         const xerField = mapFieldName(tableName, xmlName);
-        record[xerField] = rawFields[xmlName];
+        record[xerField] = mapFieldValue(xerField, rawFields[xmlName]);
       }
       const table = ensureTable(model, tableName);
       table.records.push(record);

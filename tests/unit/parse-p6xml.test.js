@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseP6Xml, getTable, getFields } from '../../src/index.js';
+import { parseXer } from '../../src/parse-xer.js';
+import { writeXer } from '../../src/write-xer.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIX = join(__dirname, '..', 'fixtures');
@@ -28,6 +30,16 @@ describe('parseP6Xml', () => {
     expect(model.ermhdr.user).toBe('admin');
     expect(model.ermhdr.db).toBe('CPP_Demo');
     expect(model.ermhdr.exportdate).toBe('2026-02-13T10:00:00');
+  });
+
+  it('round-trips through writeXer without blanking the header (export date + db survive)', () => {
+    // Regression: writeXer's synthesize branch read export_date/database, but
+    // parseP6Xml emits exportdate/db — so an XML→XER conversion silently blanked
+    // the export date and database in the ERMHDR line.
+    const reparsed = parseXer(writeXer(parseP6Xml(XML)));
+    expect(reparsed.ermhdr.version).toBe('19.12.0.0');
+    expect(reparsed.ermhdr.export_date).toBe('2026-02-13T10:00:00'); // from XML exportdate
+    expect(reparsed.ermhdr.database).toBe('CPP_Demo');               // from XML db
   });
 
   it('maps <Project> to PROJECT table with XER field names', () => {

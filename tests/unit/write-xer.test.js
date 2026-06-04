@@ -37,6 +37,23 @@ describe('writeXer round-trip', () => {
     expect(out).toMatch(/^ERMHDR\t24\.12\t2024-01-15\tadmin\tdbx\tUSD/);
   });
 
+  it('synthesizes ERMHDR from XML-shape keys (exportdate/db) when canonical keys absent', () => {
+    // parseP6Xml emits { version, exportdate, project, user, db } — no raw, and
+    // no export_date/database. The synthesize branch must populate the header
+    // from those aliases, not blank them (regression: writeXer(parseP6Xml(xml))
+    // produced a header with empty export-date and database).
+    const m = {
+      ermhdr: { version: '19.12', exportdate: '2026-02-13', project: 'P1', user: 'admin', db: 'CPP_Demo' },
+      tables: {}
+    };
+    const parts = writeXer(m).split('\n')[0].split('\t');
+    expect(parts[0]).toBe('ERMHDR');
+    expect(parts[1]).toBe('19.12');      // version
+    expect(parts[2]).toBe('2026-02-13'); // export date (from .exportdate alias)
+    expect(parts[3]).toBe('admin');      // user
+    expect(parts[4]).toBe('CPP_Demo');   // database (from .db alias)
+  });
+
   it('preserves ermhdr.raw verbatim when present', () => {
     const m = {
       ermhdr: { raw: ['ERMHDR', '24.12', '2024-01-15', 'admin', 'dbx', 'USD'], version: '24.12' },

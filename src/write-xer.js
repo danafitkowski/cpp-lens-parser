@@ -5,6 +5,8 @@
  * ERMHDR emission strategy:
  *   - If model.ermhdr.raw is an array, use it verbatim (joined with tabs).
  *   - Otherwise synthesize from version, export_date, user, database, currency.
+ *     Tolerates the XML-shape aliases parseP6Xml emits (exportdate→export_date,
+ *     db→database) so an XML→XER conversion keeps its header instead of blanking it.
  *   - If ermhdr is fully empty, emit a minimal default ERMHDR.
  *
  * TSV integrity: XER is tab-delimited, newline-terminated. A field value that
@@ -41,9 +43,9 @@ export function writeXer(model) {
     lines.push([
       'ERMHDR',
       _cell(ermhdr.version),
-      _cell(ermhdr.export_date),
+      _cell(ermhdr.export_date ?? ermhdr.exportdate),
       _cell(ermhdr.user),
-      _cell(ermhdr.database),
+      _cell(ermhdr.database ?? ermhdr.db),
       _cell(ermhdr.currency)
     ].join('\t'));
   } else {

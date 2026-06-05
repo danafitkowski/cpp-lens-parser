@@ -36,11 +36,11 @@ describe('calendar arithmetic edge cases — must terminate, never hang', () => 
     expect(`${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`).toBe('2026-01-08');
   });
 
-  it('getWorkDaysBetween bounds an absurd 0001→9999 span (no freeze)', () => {
+  it('getWorkDaysBetween returns null on an absurd span (refuses garbled input, no freeze)', () => {
     const t0 = Date.now();
     const n = getWorkDaysBetween('0001-01-01', '9999-12-31', null);
-    expect(typeof n).toBe('number');
-    expect(Date.now() - t0).toBeLessThan(2000);
+    expect(n).toBeNull();                        // implausible span → refuse, not a wrong count
+    expect(Date.now() - t0).toBeLessThan(2000);  // still fast
   });
 
   it('getWorkDaysBetween: start after end → 0', () => {

@@ -450,18 +450,18 @@ export function getWorkDaysBetween(start, end, calInfo) {
 
   const { workDays, holidaySet } = _resolveCal(calInfo);
 
-  // Bound the span. A pathological pair (e.g. 0001-01-01 → 9999-12-31) is ~3.6M
-  // day-steps — a multi-second freeze. Cap at 100 years of days; no real
-  // schedule window exceeds that, and a runaway just stops counting at the cap
-  // rather than hanging.
+  // A span beyond ~100 years is not a real schedule window — it means a garbled
+  // or sentinel date (e.g. a 9999 finish) reached this function. Refuse to
+  // compute and return null (the same signal used for missing/unparsable dates)
+  // rather than a plausible-but-wrong count or a multi-second freeze.
   const MAX_SPAN_DAYS = 366 * 100;
+  if (Math.round((e.getTime() - s.getTime()) / 86400000) > MAX_SPAN_DAYS) return null;
+
   let count = 0;
   let cur = s;
-  let steps = 0;
-  while (cur <= e && steps < MAX_SPAN_DAYS) {
+  while (cur <= e) {
     if (_isWorkDay(cur, workDays, holidaySet)) count++;
     cur = _addDays(cur, 1);
-    steps += 1;
   }
   return count;
 }

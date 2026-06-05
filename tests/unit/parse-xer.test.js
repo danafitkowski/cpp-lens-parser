@@ -54,6 +54,18 @@ describe('parseXer end-to-end', () => {
     expect(m.tables.T.records[0]).toEqual({ a: '1', b: '2', c: '' });
   });
 
+  it('preserves cells beyond the declared fields under __extra_N (never-truncate)', () => {
+    // A row with MORE cells than the %F header declared previously dropped the
+    // overflow silently. Preserve it under synthetic string keys so no data is
+    // lost (the passthrough contract — every record value stays a string).
+    const m = parseXer(['%T\tT', '%F\ta\tb', '%R\t1\t2\t3\t4'].join('\n'));
+    const rec = m.tables.T.records[0];
+    expect(rec.a).toBe('1');
+    expect(rec.b).toBe('2');
+    expect(rec.__extra_2).toBe('3'); // 3rd cell, no header
+    expect(rec.__extra_3).toBe('4'); // 4th cell, no header
+  });
+
   it('handles CRLF line endings', () => {
     const xer = 'ERMHDR\t24.12\t2024-01-15\tadmin\tdbx\tUSD\r\n%T\tT\r\n%F\tx\r\n%R\t1\r\n%E\r\n';
     const m = parseXer(xer);

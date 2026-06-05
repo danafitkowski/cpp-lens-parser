@@ -62,7 +62,14 @@ export function parseXer(text, opts = {}) {
       while (values.length < currentFields.length) values.push('');
       const record = {};
       for (let i = 0; i < currentFields.length; i++) {
-        record[currentFields[i]] = i < values.length ? values[i] : '';
+        record[currentFields[i]] = values[i];
+      }
+      // Preserve cells beyond the declared fields under synthetic string keys
+      // rather than silently dropping them (never-truncate). A well-formed XER
+      // never overflows; this only fires on a malformed/hand-edited row with
+      // extra tabs. Values stay strings (the model's passthrough contract).
+      for (let i = currentFields.length; i < values.length; i++) {
+        record[`__extra_${i}`] = values[i];
       }
       model.tables[currentTable].records.push(record);
       continue;

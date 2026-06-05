@@ -132,6 +132,7 @@ export function parseCalendarData(clndrDataStr) {
     special_workdays: [],
     exceptions: [],
     hours_per_day: null,
+    parse_incomplete: false,
     raw,
   };
 
@@ -207,6 +208,13 @@ export function parseCalendarData(clndrDataStr) {
         result.work_day_names.push(DAY_NAMES[dayIdx]);
       }
     }
+  }
+
+  // Diagnostic: a non-empty calendar string that decoded to zero work days
+  // could not be understood — flag it so a downstream Mon-Fri fallback (in
+  // _resolveCal / the arithmetic fns) isn't mistaken for a real 5-day calendar.
+  if (result.work_days.length === 0) {
+    result.parse_incomplete = true;
   }
 
   // ── Exceptions block ────────────────────────────────────────────────────────

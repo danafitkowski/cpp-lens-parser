@@ -198,4 +198,20 @@ describe('parseCalendarData', () => {
     const r = parseCalendarData(clndr);
     expect(r.work_days).toEqual([1, 2]);
   });
+
+  // ── parse_incomplete diagnostic ───────────────────────────────────────────
+
+  it('flags parse_incomplete when clndr_data is present but no work days decode', () => {
+    // A non-empty calendar string we couldn't decode must NOT masquerade as a
+    // normal calendar — surface it so a silent Mon-Fri fallback is detectable.
+    const garbled = parseCalendarData('(0||CalendarData()(GARBLED-NO-DAY-SEGMENTS))');
+    expect(garbled.work_days).toEqual([]);
+    expect(garbled.parse_incomplete).toBe(true);
+  });
+
+  it('does not flag parse_incomplete for a decodable calendar or absent input', () => {
+    expect(parseCalendarData(MON_FRI_CLNDR).parse_incomplete).toBe(false);
+    expect(parseCalendarData('').parse_incomplete).toBe(false);    // absent, not incomplete
+    expect(parseCalendarData(null).parse_incomplete).toBe(false);
+  });
 });

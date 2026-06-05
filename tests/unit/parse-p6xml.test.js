@@ -187,4 +187,24 @@ describe('parseP6Xml', () => {
     const t = getTable(parseP6Xml(xml), 'TASK')[0];
     expect(t.status_code).toBe('Some Future P6 Status');
   });
+
+  it('Start/Finish columns win over Early/Planned variants for colliding XER fields (order-independent)', () => {
+    // Both StartDate and EarlyStartDate map to early_start_date; both FinishDate
+    // and EarlyFinishDate map to early_end_date. Per the "read the Start/Finish
+    // columns at face value" rule, StartDate/FinishDate must win regardless of
+    // the order the elements appear in the XML.
+    const mk = (body) => `<?xml version="1.0"?>
+      <APIBusinessObjects Version="19.12">
+        <Project><ObjectId>1</ObjectId>
+          <Activity><ObjectId>9</ObjectId><Id>A</Id><Name>A</Name>${body}</Activity>
+        </Project>
+      </APIBusinessObjects>`;
+    const startCol = '<StartDate>2026-03-01T08:00:00</StartDate><FinishDate>2026-03-10T17:00:00</FinishDate>';
+    const earlyCol = '<EarlyStartDate>2026-09-09T08:00:00</EarlyStartDate><EarlyFinishDate>2026-09-20T17:00:00</EarlyFinishDate>';
+    for (const order of [startCol + earlyCol, earlyCol + startCol]) {
+      const t = getTable(parseP6Xml(mk(order)), 'TASK')[0];
+      expect(t.early_start_date).toBe('2026-03-01T08:00:00'); // StartDate wins
+      expect(t.early_end_date).toBe('2026-03-10T17:00:00');   // FinishDate wins
+    }
+  });
 });

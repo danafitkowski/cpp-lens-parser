@@ -182,6 +182,24 @@ const FIELD_MAP = {
   },
 };
 
+// ── Collision precedence ─────────────────────────────────────────────────────
+// Several XML fields intentionally map to one XER field (XER has fewer date
+// slots than P6 XML). When more than one is present on a record, document order
+// would silently pick the winner. Pin it explicitly instead: the Start/Finish
+// column values (StartDate/FinishDate) are authoritative over the Early*/Planned*
+// variants — read the Start/Finish columns at face value. Keyed by table → XER
+// field → ordered source XML names (first one present on the record wins).
+const FIELD_PRECEDENCE = {
+  PROJECT: {
+    plan_start_date: ['StartDate', 'PlannedStartDate'],
+    scd_end_date: ['FinishDate', 'MustFinishByDate'],
+  },
+  TASK: {
+    early_start_date: ['StartDate', 'EarlyStartDate'],
+    early_end_date: ['FinishDate', 'EarlyFinishDate'],
+  },
+};
+
 // ── Helpers ────────────────────────────────────────────────────────────────
 function camelToSnake(s) {
   return String(s).replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
@@ -370,8 +388,19 @@ export function parseP6Xml(text, opts = {}) {
     if (tableName) {
       const rawFields = pickTextFields(el);
       const record = {};
+      // Resolve collision winners up front: when several XML fields map to the
+      // same XER field, the precedence list (not document order) decides which wins.
+      const prec = FIELD_PRECEDENCE[tableName] || {};
+      const winners = {}; // xerField -> winning source xmlName present on this record
+      for (const xerField of Object.keys(prec)) {
+        for (const src of prec[xerField]) {
+          if (src in rawFields) { winners[xerField] = src; break; }
+        }
+      }
       for (const xmlName of Object.keys(rawFields)) {
         const xerField = mapFieldName(tableName, xmlName);
+        // Skip a colliding source that lost to a higher-precedence sibling.
+        if (xerField in winners && winners[xerField] !== xmlName) continue;
         record[xerField] = mapFieldValue(xerField, rawFields[xmlName]);
       }
       const table = ensureTable(model, tableName);

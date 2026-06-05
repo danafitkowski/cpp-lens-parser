@@ -59,7 +59,8 @@ function _balancedBlockAfter(text, anchor) {
 
 /**
  * Convert a P6 exception date serial (int Excel serial or YYYY-MM-DD string) to
- * an ISO date string. Returns '' if malformed or outside the 1990–2050 range.
+ * an ISO date string. Returns '' if malformed or outside the 1970–2099 range
+ * (a real construction schedule never carries exception dates beyond this).
  *
  * @param {string} serialRaw
  * @returns {string}
@@ -76,7 +77,7 @@ function _xerExceptionSerialToIso(serialRaw) {
       const ms = epoch + serial * 86400000;
       const dt = new Date(ms);
       const year = dt.getUTCFullYear();
-      if (year >= 1990 && year <= 2050) {
+      if (year >= 1970 && year <= 2099) {
         const mo = String(dt.getUTCMonth() + 1).padStart(2, '0');
         const dy = String(dt.getUTCDate()).padStart(2, '0');
         return `${year}-${mo}-${dy}`;
@@ -91,7 +92,7 @@ function _xerExceptionSerialToIso(serialRaw) {
   if (m) {
     try {
       const year = parseInt(m[1].slice(0, 4), 10);
-      if (year >= 1990 && year <= 2050) {
+      if (year >= 1970 && year <= 2099) {
         return m[1];
       }
     } catch (_) {
@@ -298,7 +299,7 @@ export function parseCalendarData(clndrDataStr) {
       const iso = m[1];
       try {
         const y = parseInt(iso.slice(0, 4), 10);
-        if (y >= 1990 && y <= 2050 && !walkerWorking.has(iso)) {
+        if (y >= 1970 && y <= 2099 && !walkerWorking.has(iso)) {
           result.holidays.push(iso);
         }
       } catch (_) {

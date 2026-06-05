@@ -214,4 +214,18 @@ describe('parseCalendarData', () => {
     expect(parseCalendarData('').parse_incomplete).toBe(false);    // absent, not incomplete
     expect(parseCalendarData(null).parse_incomplete).toBe(false);
   });
+
+  // ── exception date window (widened to 1970–2099) ──────────────────────────
+
+  it('keeps a far-future holiday (2051–2099) instead of silently dropping it', () => {
+    const exceptions = '(0||Exceptions()((0||0(d|2080-07-01)())))';
+    const clndr = `(0||CalendarData()${DOW_BLOCK}${exceptions})`;
+    expect(parseCalendarData(clndr).holidays).toContain('2080-07-01');
+  });
+
+  it('still rejects an implausible exception year (corrupt serial)', () => {
+    const exceptions = '(0||Exceptions()((0||0(d|3500-01-01)())))';
+    const clndr = `(0||CalendarData()${DOW_BLOCK}${exceptions})`;
+    expect(parseCalendarData(clndr).holidays).not.toContain('3500-01-01');
+  });
 });

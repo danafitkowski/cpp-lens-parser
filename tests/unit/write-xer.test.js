@@ -28,20 +28,32 @@ describe('writeXer round-trip', () => {
     });
   }
 
-  it('emits ERMHDR even when ermhdr.raw is absent (synthesizes from fields)', () => {
+  it('emits canonical 9-field ERMHDR when ermhdr.raw is absent (synthesizes from fields)', () => {
+    // Canonical positional layout: parts[3]=export_flag, [4]=user(login),
+    // [5]=user_full_name, [6]=database, [7]=module, [8]=currency.
     const m = {
-      ermhdr: { version: '24.12', export_date: '2024-01-15', user: 'admin', database: 'dbx', currency: 'USD' },
+      ermhdr: {
+        version: '24.12', export_date: '2024-01-15', export_flag: 'Project',
+        user: 'admin', user_full_name: 'Test User', database: 'dbx',
+        module: 'Project Management', currency: 'USD'
+      },
       tables: {}
     };
     const out = writeXer(m);
-    expect(out).toMatch(/^ERMHDR\t24\.12\t2024-01-15\tadmin\tdbx\tUSD/);
+    expect(out).toMatch(/^ERMHDR\t24\.12\t2024-01-15\tProject\tadmin\tTest User\tdbx\tProject Management\tUSD/);
+    // Round-trips back to the same fields through the canonical reader.
+    const r = parseXer(out);
+    expect(r.ermhdr.user).toBe('admin');
+    expect(r.ermhdr.database).toBe('dbx');
+    expect(r.ermhdr.currency).toBe('USD');
   });
 
-  it('synthesizes ERMHDR from XML-shape keys (exportdate/db) when canonical keys absent', () => {
+  it('synthesizes ERMHDR from XML-shape keys (exportdate/db/project) into canonical slots', () => {
     // parseP6Xml emits { version, exportdate, project, user, db } — no raw, and
     // no export_date/database. The synthesize branch must populate the header
-    // from those aliases, not blank them (regression: writeXer(parseP6Xml(xml))
-    // produced a header with empty export-date and database).
+    // from those aliases into the canonical positional slots, not blank them
+    // (regression: writeXer(parseP6Xml(xml)) produced a header with empty
+    // export-date and database, or with database in the wrong column).
     const m = {
       ermhdr: { version: '19.12', exportdate: '2026-02-13', project: 'P1', user: 'admin', db: 'CPP_Demo' },
       tables: {}
@@ -50,8 +62,13 @@ describe('writeXer round-trip', () => {
     expect(parts[0]).toBe('ERMHDR');
     expect(parts[1]).toBe('19.12');      // version
     expect(parts[2]).toBe('2026-02-13'); // export date (from .exportdate alias)
-    expect(parts[3]).toBe('admin');      // user
-    expect(parts[4]).toBe('CPP_Demo');   // database (from .db alias)
+    expect(parts[3]).toBe('P1');         // export_flag (from .project alias)
+    expect(parts[4]).toBe('admin');      // user (login)
+    expect(parts[6]).toBe('CPP_Demo');   // database (from .db alias), canonical slot 6
+    // Round-trips back through the canonical reader to the right fields.
+    const r = parseXer(writeXer(m));
+    expect(r.ermhdr.user).toBe('admin');
+    expect(r.ermhdr.database).toBe('CPP_Demo');
   });
 
   it('preserves ermhdr.raw verbatim when present', () => {

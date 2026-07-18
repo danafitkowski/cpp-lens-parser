@@ -228,4 +228,51 @@ describe('parseCalendarData', () => {
     const clndr = `(0||CalendarData()${DOW_BLOCK}${exceptions})`;
     expect(parseCalendarData(clndr).holidays).not.toContain('3500-01-01');
   });
+
+  // ── continuous-calendar separated-body exceptions (2026-06-16 incident) ────
+  // P6 separates an exception serial from its time-slot body with line markers
+  // (\x7f\x7f) + whitespace. The old adjacent pre-scan regex required them to be
+  // adjacent, so on continuous (7x24 / 7-Day) calendars every working exception
+  // fell through to `holidays` — the calendar decoded to hundreds of phantom
+  // days off and CPM finish blew out by months. The per-segment scan is
+  // separator-tolerant. Mirrors the Python regression
+  // test_continuous_calendar_exceptions_2026_06_16.py.
+
+  const SEP = '\x7f\x7f'; // the P6 line marker that broke the old regex
+
+  it('classifies marker-separated work-hour exceptions as special workdays, not holidays', () => {
+    const days = [1, 2, 3, 4, 5, 6, 7].map(d =>
+      `    (0||${d}()(${SEP}      (0||0(s|08:00|f|12:00)())${SEP}      (0||1(s|13:00|f|17:00)())))`
+    ).join(SEP);
+    // 36982 + 36983 carry work-hour slots (special workdays); 40000 is empty (holiday)
+    const exc =
+      `    (0||0(d|36982)(${SEP}      (0||0(s|08:00|f|12:00)())${SEP}      (0||1(s|13:00|f|17:00)())))` +
+      `${SEP}    (0||1(d|36983)(${SEP}      (0||0(s|08:00|f|16:00)())))` +
+      `${SEP}    (0||2(d|40000)())`;
+    const clndr =
+      `(0||CalendarData()(${SEP}  (0||DaysOfWeek()(${SEP}${days}))${SEP}  (0||Exceptions()(${SEP}${exc})))`;
+    const r = parseCalendarData(clndr);
+    const iso36982 = '2001-04-01';
+    const iso36983 = '2001-04-02';
+    const iso40000 = '2009-07-06';
+    // the two work-hour exceptions must NOT be holidays
+    expect(r.holidays).not.toContain(iso36982);
+    expect(r.holidays).not.toContain(iso36983);
+    expect(r.special_workdays).toContain(iso36982);
+    expect(r.special_workdays).toContain(iso36983);
+    // the genuine empty-body exception MUST remain a holiday
+    expect(r.holidays).toContain(iso40000);
+  });
+
+  it('keeps marker-separated empty-body exceptions as holidays (statutory holidays preserved)', () => {
+    const days = [2, 3, 4, 5, 6].map(d => // Mon-Fri
+      `    (0||${d}()(${SEP}      (0||0(s|08:00|f|16:00)())))`
+    ).join(SEP);
+    const exc = `    (0||0(d|46731)())${SEP}    (0||1(d|46738)())`; // two empty-body holidays
+    const clndr =
+      `(0||CalendarData()(${SEP}  (0||DaysOfWeek()(${SEP}${days}))${SEP}  (0||Exceptions()(${SEP}${exc})))`;
+    const r = parseCalendarData(clndr);
+    expect(r.holidays.length).toBe(2);
+    expect(r.special_workdays).toEqual([]);
+  });
 });

@@ -273,19 +273,31 @@ export function parseCalendarData(clndrDataStr) {
     // Union with the walker output to catch any P6-variant export formats.
     const walkerWorking = new Set(result.special_workdays);
 
-    // Pre-scan serials that have a time-slot body → special workdays, not holidays.
-    const specialSerials = new Set(
-      [...excBlock.matchAll(/d\|(\d+)\)\(\(?\(?0?\|?\|?0?\(s\|\d{1,2}:\d{2}\|f\|/g)]
-        .map(m => m[1])
-    );
-
-    // Integer Excel-serial exceptions: d|<int>
-    for (const m of excBlock.matchAll(/d\|(\d+)\b/g)) {
+    // Classify EACH integer-serial exception by whether ITS OWN segment
+    // (from this serial up to the next serial) contains a work time-slot.
+    // A segment with a time-slot is a special workday (modified working day),
+    // NOT a holiday; an empty body is a genuine non-working holiday.
+    //
+    // The earlier pre-scan regex required the serial and its time-slot body to
+    // be adjacent. P6 separates them with line markers (\x7f\x7f) + whitespace,
+    // so on continuous calendars (7x24 / 7-Day) every working exception fell
+    // through to `holidays` — a continuous calendar decoded to hundreds of
+    // phantom days off, blowing up CPM by months (2026-06-16 incident).
+    // Per-segment scanning is separator-tolerant and preserves real statutory
+    // holidays (empty body) on work calendars.
+    // Mirrors xer_parser.py:668-680.
+    const intSerials = [...excBlock.matchAll(/d\|(\d+)\b/g)];
+    for (let idx = 0; idx < intSerials.length; idx++) {
+      const m = intSerials[idx];
       const serial = m[1];
       const iso = _xerExceptionSerialToIso(serial);
       if (!iso) continue;
       if (walkerWorking.has(iso)) continue;
-      if (specialSerials.has(serial)) {
+      const segEnd = (idx + 1 < intSerials.length)
+        ? intSerials[idx + 1].index
+        : excBlock.length;
+      const segment = excBlock.slice(m.index + m[0].length, segEnd);
+      if (RE_TIME_SLOT.test(segment)) {
         if (!result.special_workdays.includes(iso)) {
           result.special_workdays.push(iso);
         }
@@ -308,9 +320,13 @@ export function parseCalendarData(clndrDataStr) {
     }
   }
 
-  // Remove duplicates and sort
-  result.holidays = [...new Set(result.holidays)].sort();
+  // Remove duplicates and sort. A day carrying explicit work hours is a
+  // working day, never a holiday: if two parse paths disagree on a serial,
+  // special_workday wins (insurance against double-classification).
+  // Mirrors xer_parser.py:694-695.
   result.special_workdays = [...new Set(result.special_workdays)].sort();
+  const specialSet = new Set(result.special_workdays);
+  result.holidays = [...new Set(result.holidays)].filter(d => !specialSet.has(d)).sort();
 
   return result;
 }

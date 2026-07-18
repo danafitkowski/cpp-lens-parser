@@ -6,7 +6,7 @@ Companion to [cpp-cpm-engine](https://github.com/danafitkowski/cpp-cpm-engine) a
 
 ## Status
 
-v0.2.0 — alias-aware table access, multi-name field fallback, opt-in rawText.
+v0.3.2 — P6 XML parsing (`parseP6Xml`), pako gzip helpers, alias-aware table access, multi-name field fallback, opt-in rawText.
 
 ## Install
 
@@ -18,7 +18,8 @@ npm install @criticalpathpartners/lens-parser
 
 ```javascript
 import {
-  parseXer, writeXer,
+  parseXer, parseP6Xml, writeXer,
+  gzipText, gunzipText, gzipToBase64, gunzipFromBase64,
   getTable, getFields,
   getTableAliased, getFirstField, TABLE_ALIASES,
   buildWbsMap, buildPredecessorMap, buildResourceMap, buildActivityCodeMap, buildUdfMap,
@@ -28,6 +29,14 @@ import {
 // Read an XER file
 const xerText = await fetch('/schedule.xer').then(r => r.text());
 const model = parseXer(xerText, { filename: 'schedule.xer' });
+
+// Read a P6 XML export — same model shape as parseXer
+const xmlText = await fetch('/schedule.xml').then(r => r.text());
+const xmlModel = parseP6Xml(xmlText, { filename: 'schedule.xml' });
+
+// gzip helpers (pako) for compact storage/transport of XER text
+const packed = gzipToBase64(xerText);     // base64 of gzipped bytes
+const original = gunzipFromBase64(packed); // round-trips back to xerText
 
 // Access tables — canonical name
 const tasks = getTable(model, 'TASK');
@@ -93,6 +102,14 @@ npm run test:parity
 
 Round-trip writer fidelity is verified: every fixture passes `parseXer(writeXer(parseXer(text)))` byte-identical at the `ermhdr` + `tables` level.
 
+## What's new in 0.3
+
+- **`parseP6Xml(text, opts)`** — parses a Primavera P6 XML export into the SAME model shape `parseXer` returns (`{ ermhdr, tables, filepath, ... }`), with XML elements mapped to XER table names (`Activity` → `TASK`, `Relationship` → `TASKPRED`, `WBS` → `PROJWBS`, etc.) and enum values translated to XER codes. Downstream helpers (`getTable`, `buildPredecessorMap`, the Lens viewer renderers) work on XML inputs with no source changes. Unmapped fields pass through (never-truncate rule), and `Start`/`Finish` columns are pinned over `Early`/`Planned` on field collisions.
+- **pako gzip helpers** — `gzipText`/`gunzipText` and `gzipToBase64`/`gunzipFromBase64` for compact storage and transport of XER text (the only runtime dependency, `pako`, backs these).
+- **Overflow-cell preservation** — rows with more cells than declared fields keep the extras under `__extra_N` keys rather than dropping them.
+- **`parse_incomplete` flag** — calendars whose `clndr_data` cannot be fully decoded are flagged rather than silently mis-parsed; the exception-date window was widened to 1970-2099.
+- **Absurd-span guard** — `getWorkDaysBetween` returns `null` on a span over ~100 years instead of looping, guarding against malformed dates.
+
 ## What's new in 0.2
 
 - **`getTableAliased(model, alias)`** — resolves logical names (`WBS`, `REL`, `ASSIGN`, `CAL`, `COST`, etc.) to their canonical P6 table names via the exported `TABLE_ALIASES` map. Falls back to a direct lookup when the name isn't in the map, so it's a safe drop-in for `getTable`.
@@ -101,7 +118,7 @@ Round-trip writer fidelity is verified: every fixture passes `parseXer(writeXer(
 
 ## Test count
 
-230 unit tests + 8 parity tests + 14 writer round-trip tests + Web Worker tests + perf test + bundle smoke test = ~248 tests.
+Unit tests + 9 JS↔Python parity tests + 14 writer round-trip tests + Web Worker tests + perf test + bundle smoke test = 311 tests across 29 files (`npx vitest run`).
 
 ## License
 

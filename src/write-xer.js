@@ -4,9 +4,12 @@
  *
  * ERMHDR emission strategy:
  *   - If model.ermhdr.raw is an array, use it verbatim (joined with tabs).
- *   - Otherwise synthesize from version, export_date, user, database, currency.
- *     Tolerates the XML-shape aliases parseP6Xml emits (exportdate→export_date,
- *     db→database) so an XML→XER conversion keeps its header instead of blanking it.
+ *   - Otherwise synthesize the canonical 9-field P6 ERMHDR layout (positional):
+ *     version, export_date, export_flag, user(login), user_full_name, database,
+ *     module, currency — matching parseHeader / xer_parser.py so an XER→model→XER
+ *     round-trip lands every field in its correct slot. Tolerates the XML-shape
+ *     aliases parseP6Xml emits (exportdate→export_date, db→database, project→
+ *     export_flag) so an XML→XER conversion keeps its header instead of blanking it.
  *   - If ermhdr is fully empty, emit a minimal default ERMHDR.
  *
  * TSV integrity: XER is tab-delimited, newline-terminated. A field value that
@@ -40,17 +43,23 @@ export function writeXer(model) {
   if (Array.isArray(ermhdr.raw) && ermhdr.raw.length > 0) {
     lines.push(ermhdr.raw.map(_cell).join('\t'));
   } else if (Object.keys(ermhdr).length > 0) {
+    // Canonical 9-field positional layout: parts[3]=export_flag, [4]=user(login),
+    // [5]=user_full_name, [6]=database, [7]=module, [8]=currency.
     lines.push([
       'ERMHDR',
       _cell(ermhdr.version),
       _cell(ermhdr.export_date ?? ermhdr.exportdate),
+      _cell(ermhdr.export_flag ?? ermhdr.project),
       _cell(ermhdr.user),
+      _cell(ermhdr.user_full_name),
       _cell(ermhdr.database ?? ermhdr.db),
+      _cell(ermhdr.module),
       _cell(ermhdr.currency)
     ].join('\t'));
   } else {
     // No ermhdr at all — emit a placeholder so writers are always valid XER.
-    lines.push(['ERMHDR', '24.12', new Date().toISOString().slice(0, 10), 'lens', 'dbx', 'USD'].join('\t'));
+    // Canonical 9-field layout (export_flag, login, full_name, db, module, currency).
+    lines.push(['ERMHDR', '24.12', new Date().toISOString().slice(0, 10), 'Project', 'lens', '', 'dbx', 'Project Management', 'USD'].join('\t'));
   }
 
   // Tables in insertion order

@@ -1,0 +1,44 @@
+name: test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '20', '22']
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      # DELIBERATE EXCLUSION — tests/parity/ is NOT run in CI.
+      #
+      # The parity suite (tests/parity/parity.test.js, 9 tests) diffs this JS
+      # parser against the canonical Python xer-parser skill, which
+      # python_emit.py imports from ~/.claude/skills/xer-parser/scripts. That
+      # skill exists only on Dana's machines; it is not vendored here because
+      # a checked-in copy would drift from the canonical source and fake
+      # parity against a stale reference. Without it, python_emit.py fails at
+      # import and every parity test errors — so the stage is excluded
+      # explicitly rather than left to fail or skip silently.
+      #
+      # Parity coverage still runs locally: `npm test` (all 311 tests) or
+      # `npm run test:parity` before any release.
+      #
+      # This invocation runs the unit, browser, and perf suites:
+      # 28 files / 302 of 311 tests.
+      - name: Run tests (parity excluded — see comment above)
+        run: npx vitest run --exclude "tests/parity/**"

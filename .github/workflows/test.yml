@@ -24,9 +24,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # dist/ is generated, not committed (.gitignore line 2). Without it,
+      # tests/browser/smoke.test.js cannot import ../../dist/index.js at all,
+      # and the dist/-mirrors-src/ freshness test has nothing to compare.
+      - name: Build dist/ (gitignored, generated from src/)
+        run: npm run build
+
+      # tests/fixtures/large-synthetic.xer is generated, not committed
+      # (.gitignore line 6). Without it, tests/unit/gzip.test.js fails at
+      # collection (module-scope read), tests/perf/parse-perf.test.js throws
+      # ENOENT, and the write-xer round-trip case for it silently disappears
+      # (that suite globs the fixtures dir). Deterministic: 724,774 bytes,
+      # sha256 15be24343a665aa8a7390f98712e384b4b8ba0f622be64f4428da4cb9f85e718.
+      # No argument — the generator defaults N to 5000, the full perf workload.
+      - name: Generate 5000-activity perf fixture (gitignored, deterministic)
+        run: npm run fixtures
+
       # DELIBERATE EXCLUSION — tests/parity/ is NOT run in CI.
       #
-      # The parity suite (tests/parity/parity.test.js, 9 tests) diffs this JS
+      # The parity suite (tests/parity/parity.test.js, 10 tests) diffs this JS
       # parser against the canonical Python xer-parser skill, which
       # python_emit.py imports from ~/.claude/skills/xer-parser/scripts. That
       # skill exists only on Dana's machines; it is not vendored here because
@@ -35,10 +51,10 @@ jobs:
       # import and every parity test errors — so the stage is excluded
       # explicitly rather than left to fail or skip silently.
       #
-      # Parity coverage still runs locally: `npm test` (all 311 tests) or
+      # Parity coverage still runs locally: `npm test` (all 313 tests) or
       # `npm run test:parity` before any release.
       #
       # This invocation runs the unit, browser, and perf suites:
-      # 28 files / 302 of 311 tests.
+      # 28 files / 303 of 313 tests.
       - name: Run tests (parity excluded — see comment above)
         run: npx vitest run --exclude "tests/parity/**"

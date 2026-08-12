@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -10,7 +10,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIX = join(__dirname, '..', 'fixtures');
 
 const SAMPLE_XER = readFileSync(join(FIX, 'minimal-3-task.xer'), 'utf-8');
-const LARGE_XER = readFileSync(join(FIX, 'large-synthetic.xer'), 'utf-8');
+
+// large-synthetic.xer is deliberately NOT read here. It is generated, not
+// committed (.gitignore line 6), and a module-scope read of a missing file is a
+// collection error that deletes all five tests in this file from the run rather
+// than failing one. Only the compression-ratio test needs it, so it reads the
+// file itself.
+const LARGE_XER_PATH = join(FIX, 'large-synthetic.xer');
 
 describe('gzip helpers', () => {
   it('round-trips text through gzipText / gunzipText', async () => {
@@ -33,6 +39,12 @@ describe('gzip helpers', () => {
   });
 
   it('shrinks the wire payload substantially for repetitive XER text', async () => {
+    expect(
+      existsSync(LARGE_XER_PATH),
+      'tests/fixtures/large-synthetic.xer is missing — run `npm run fixtures`'
+    ).toBe(true);
+    const LARGE_XER = readFileSync(LARGE_XER_PATH, 'utf-8');
+
     const original_kb = LARGE_XER.length / 1024;
     const b64 = await gzipToBase64(LARGE_XER);
     const wire_kb = b64.length / 1024;

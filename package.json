@@ -8,9 +8,11 @@
     ".": "./src/index.js"
   },
   "scripts": {
+    "fixtures": "node scripts/gen-large-fixture.mjs",
+    "pretest": "npm run fixtures && npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:parity": "vitest run tests/parity",
+    "test:parity": "npm run fixtures && vitest run tests/parity",
     "build": "node scripts/bundle.mjs"
   },
   "dependencies": {

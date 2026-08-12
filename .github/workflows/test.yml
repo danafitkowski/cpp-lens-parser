@@ -13,7 +13,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: ['18', '20', '22']
+      # Node 18 removed 2026-08-12. It is past end-of-life, and it cannot
+      # require() the ESM-only @exodus/bytes that jsdom pulls in through
+      # html-encoding-sniffer, so the browser suite dies on an import rather
+      # than on anything this parser does. Node 20 and 22 both pass. The
+      # supported floor is declared in package.json engines.
+        node: ['20', '22']
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 

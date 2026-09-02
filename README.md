@@ -1,6 +1,6 @@
 # @criticalpathpartners/lens-parser
 
-JavaScript reader and writer for Primavera P6 XER files. Pure ES modules, browser-compatible, zero runtime dependencies.
+JavaScript reader and writer for Primavera P6 XER files. Pure ES modules, browser-compatible. The parser and writer core is dependency-free; the optional gzip helpers lazily `import('pako')`, which is the package's one declared runtime dependency.
 
 Companion to [cpp-cpm-engine](https://github.com/danafitkowski/cpp-cpm-engine) and powers the CPP Lens browser viewer at https://criticalpathpartners.ca/viewer/.
 
@@ -10,8 +10,37 @@ v0.3.2 — P6 XML parsing (`parseP6Xml`), pako gzip helpers, alias-aware table a
 
 ## Install
 
+Install from the git repo. This works whether or not the package is on the npm registry:
+
 ```bash
-npm install @criticalpathpartners/lens-parser
+npm install github:danafitkowski/cpp-lens-parser
+```
+
+npm resolves it under the `name` in `package.json`, so it lands at
+`node_modules/@criticalpathpartners/lens-parser` and the bare
+`@criticalpathpartners/lens-parser` specifier used in the examples below resolves
+unchanged. There is no `prepare` step, and `main` points at `src/index.js`, so nothing
+has to be built for Node use.
+
+Pin a commit for a reproducible install:
+
+```bash
+npm install github:danafitkowski/cpp-lens-parser#a753a09
+```
+
+**Registry status:** as of v0.3.2 (checked 2026-09-02) `@criticalpathpartners/lens-parser`
+is not published to npm, so `npm install @criticalpathpartners/lens-parser` fails with
+E404. Run `npm view @criticalpathpartners/lens-parser` to check the current state.
+
+Two other paths, if a git dependency does not suit:
+
+```bash
+# Vendor it. src/ is plain ES modules with no build step, so the tree can be
+# copied into a project and imported by relative path.
+git clone https://github.com/danafitkowski/cpp-lens-parser.git
+
+# Or build the single-file browser bundle (writes dist/index.js).
+cd cpp-lens-parser && npm install && npm run build
 ```
 
 ## Usage
@@ -34,9 +63,10 @@ const model = parseXer(xerText, { filename: 'schedule.xer' });
 const xmlText = await fetch('/schedule.xml').then(r => r.text());
 const xmlModel = parseP6Xml(xmlText, { filename: 'schedule.xml' });
 
-// gzip helpers (pako) for compact storage/transport of XER text
-const packed = gzipToBase64(xerText);     // base64 of gzipped bytes
-const original = gunzipFromBase64(packed); // round-trips back to xerText
+// gzip helpers (pako) for compact storage/transport of XER text.
+// All four gzip helpers are async (pako is imported lazily), so await them.
+const packed = await gzipToBase64(xerText);      // base64 of gzipped bytes
+const original = await gunzipFromBase64(packed); // round-trips back to xerText
 
 // Access tables — canonical name
 const tasks = getTable(model, 'TASK');
@@ -94,13 +124,26 @@ const updatedXer = writeXer(model);
 
 ## Parity
 
-Every fixture in `tests/fixtures/` is parsed by both this library and the canonical Python `xer-parser` skill; the resulting models are diffed and any divergence fails the build. Run:
+Every fixture in `tests/fixtures/` is parsed by both this library and the canonical Python `xer-parser` skill; the resulting models are diffed and any divergence fails the run:
 
 ```bash
 npm run test:parity
 ```
 
-Round-trip writer fidelity is verified: every fixture passes `parseXer(writeXer(parseXer(text)))` byte-identical at the `ermhdr` + `tables` level.
+This one suite needs a local copy of that Python skill (`tests/parity/python_emit.py`
+imports it from `~/.claude/skills/xer-parser/scripts`). It is not vendored here, because
+a checked-in copy would drift from the canonical source and fake parity against a stale
+reference. Without it every parity test errors at import, so the suite is deliberately
+excluded from CI rather than left to fail or skip silently. A clone without the skill
+should run the CI invocation instead:
+
+```bash
+npx vitest run --exclude "tests/parity/**"
+```
+
+Round-trip writer fidelity is verified separately and does run in CI: every fixture
+passes `parseXer(writeXer(parseXer(text)))` byte-identical at the `ermhdr` + `tables`
+level.
 
 ## What's new in 0.3
 
@@ -118,7 +161,18 @@ Round-trip writer fidelity is verified: every fixture passes `parseXer(writeXer(
 
 ## Test count
 
-Unit tests + 9 JS↔Python parity tests + 14 writer round-trip tests + Web Worker tests + perf test + bundle smoke test = 311 tests across 29 files (`npx vitest run`).
+`npm test` runs 313 tests across 29 files, all passing. Its `pretest` hook generates the
+5000-activity perf fixture and builds `dist/` first; both are gitignored, so a bare
+`npx vitest run` on a fresh clone collects 311 tests and fails 6 of them purely for those
+missing artefacts. Run `npm test`, not `npx vitest run`.
+
+CI runs 303 of the 313, across 28 files
+(`npx vitest run --exclude "tests/parity/**"`), excluding parity for the reason above.
+
+The 313 are 9 JS↔Python parity comparisons plus a fixture-set pin (10), 9 writer
+round-trip cases plus 7 other writer tests (16), 5 writer TSV-safety tests, 4 Web Worker
+tests, 3 bundle smoke tests, 1 perf test, and 274 unit tests across the parser, XML
+reader, access helpers, calendars and encoding.
 
 ## License
 

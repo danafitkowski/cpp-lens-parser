@@ -151,6 +151,7 @@ level.
 - **pako gzip helpers** — `gzipText`/`gunzipText` and `gzipToBase64`/`gunzipFromBase64` for compact storage and transport of XER text (the only runtime dependency, `pako`, backs these).
 - **Overflow-cell preservation** — rows with more cells than declared fields keep the extras under `__extra_N` keys rather than dropping them.
 - **`parse_incomplete` flag** — calendars whose `clndr_data` cannot be fully decoded are flagged rather than silently mis-parsed; the exception-date window was widened to 1970-2099.
+- **Finish-first time slots** — P6 writes a calendar time slot start-first `(s|08:00|f|16:00)` or finish-first `(f|12:00|s|08:00)`, per calendar. Both now decode, in the work week and in exceptions, as the canonical Python `xer-parser` has since 2026-08-25. Before this, a finish-first calendar decoded to no work days (`parse_incomplete`, then Mon-Fri downstream) and its working exceptions were read as holidays.
 - **Absurd-span guard** — `getWorkDaysBetween` returns `null` on a span over ~100 years instead of looping, guarding against malformed dates.
 
 ## What's new in 0.2
@@ -161,17 +162,17 @@ level.
 
 ## Test count
 
-`npm test` runs 313 tests across 29 files, all passing. Its `pretest` hook generates the
+`npm test` runs 322 tests across 30 files, all passing. Its `pretest` hook generates the
 5000-activity perf fixture and builds `dist/` first; both are gitignored, so a bare
-`npx vitest run` on a fresh clone collects 311 tests and fails 6 of them purely for those
+`npx vitest run` on a fresh clone collects 320 tests and fails 6 of them purely for those
 missing artefacts. Run `npm test`, not `npx vitest run`.
 
-CI runs 303 of the 313, across 28 files
+CI runs 312 of the 322, across 29 files
 (`npx vitest run --exclude "tests/parity/**"`), excluding parity for the reason above.
 
-The 313 are 9 JS↔Python parity comparisons plus a fixture-set pin (10), 9 writer
+The 322 are 9 JS↔Python parity comparisons plus a fixture-set pin (10), 9 writer
 round-trip cases plus 7 other writer tests (16), 5 writer TSV-safety tests, 4 Web Worker
-tests, 3 bundle smoke tests, 1 perf test, and 274 unit tests across the parser, XML
+tests, 3 bundle smoke tests, 1 perf test, and 283 unit tests across the parser, XML
 reader, access helpers, calendars and encoding.
 
 ## License

@@ -4,6 +4,8 @@
  * The P6 clndr_data string uses a proprietary parenthesised encoding:
  *   DaysOfWeek block: day 1=Sunday … day 7=Saturday; work days contain time slots.
  *   Exceptions block: holiday (no time slot) or special workday (has time slot).
+ *   A time slot is written start-first (s|HH:MM|f|HH:MM) or finish-first
+ *   (f|HH:MM|s|HH:MM); both count (see RE_TIME_SLOT).
  *
  * Calendar arithmetic functions mirror xer_parser.py:
  *   get_calendar_map (lines 617-647)
@@ -105,8 +107,25 @@ function _xerExceptionSerialToIso(serialRaw) {
 
 /** Regex to identify the start of a day segment inside a DaysOfWeek block. */
 const RE_DAY_SEGMENT = /^\(0\|\|(\d)\(\)/;
-/** Regex to detect a P6 time slot `(s|HH:MM|f|HH:MM)`. */
-const RE_TIME_SLOT = /\(s\|\d{1,2}:\d{2}\|f\|\d{1,2}:\d{2}\)/;
+/**
+ * Regex to detect a P6 time slot in EITHER field order:
+ *   (s|08:00|f|16:00)   start-first
+ *   (f|12:00|s|08:00)   finish-first
+ * Hours may be 1 or 2 digits ('8:00').
+ *
+ * The order belongs to the individual calendar, not to the export or the P6
+ * version: one genuine P6 24.12 export carries its five-day calendar
+ * start-first and its six-day calendar finish-first, so the order cannot be
+ * sniffed from the export header. Matching start-first only made every
+ * finish-first calendar decode to zero work days (parse_incomplete, then a
+ * substituted Mon-Fri week) and filed every finish-first exception body as a
+ * holiday instead of a working day. The canonical Python xer-parser measured
+ * 17 such calendars in 14 real files and fixed it in e42b693 (2026-08-25);
+ * this is the same pattern as its _TIME_SLOT_RE. Used by all three scanners
+ * below: the DaysOfWeek day scanner, the exception walker and the
+ * per-segment exception fallback.
+ */
+const RE_TIME_SLOT = /\((?:s\|\d{1,2}:\d{2}\|f|f\|\d{1,2}:\d{2}\|s)\|\d{1,2}:\d{2}\)/;
 /** Regex to match the start of an exception segment `(0||0(d|<serial>)`. */
 const RE_EXCEPTION_SEGMENT = /^\(0\|\|0\(d\|([^)]+)\)/;
 

@@ -56,10 +56,10 @@ jobs:
       # import and every parity test errors — so the stage is excluded
       # explicitly rather than left to fail or skip silently.
       #
-      # Parity coverage still runs locally: `npm test` (all 313 tests) or
+      # Parity coverage still runs locally: `npm test` (all 322 tests) or
       # `npm run test:parity` before any release.
       #
       # This invocation runs the unit, browser, and perf suites:
-      # 28 files / 303 of 313 tests.
+      # 29 files / 312 of 322 tests.
       - name: Run tests (parity excluded — see comment above)
         run: npx vitest run --exclude "tests/parity/**"

@@ -6,6 +6,8 @@ Companion to [cpp-cpm-engine](https://github.com/danafitkowski/cpp-cpm-engine) a
 
 ## Status
 
+v0.4.0 — calendars read the way P6 schedules on them: hours per day from the shifts when `day_hr_cnt` says otherwise, and an empty calendar record as P6's internal Standard; `calendarShiftHours`.
+
 v0.3.2 — P6 XML parsing (`parseP6Xml`), pako gzip helpers, alias-aware table access, multi-name field fallback, opt-in rawText.
 
 ## Install
@@ -28,7 +30,7 @@ Pin a commit for a reproducible install:
 npm install github:danafitkowski/cpp-lens-parser#a753a09
 ```
 
-**Registry status:** as of v0.3.2 (checked 2026-09-02) `@criticalpathpartners/lens-parser`
+**Registry status:** as of v0.4.0 (checked 2026-10-13) `@criticalpathpartners/lens-parser`
 is not published to npm, so `npm install @criticalpathpartners/lens-parser` fails with
 E404. Run `npm view @criticalpathpartners/lens-parser` to check the current state.
 
@@ -52,7 +54,8 @@ import {
   getTable, getFields,
   getTableAliased, getFirstField, TABLE_ALIASES,
   buildWbsMap, buildPredecessorMap, buildResourceMap, buildActivityCodeMap, buildUdfMap,
-  getCalendarMap, addWorkDays, subtractWorkDays, getWorkDaysBetween, durationHoursToDays
+  getCalendarMap, calendarShiftHours, addWorkDays, subtractWorkDays, getWorkDaysBetween,
+  durationHoursToDays
 } from '@criticalpathpartners/lens-parser';
 
 // Read an XER file
@@ -85,6 +88,7 @@ const wbsName = getFirstField(wbsRecords[0], ['wbs_name', 'wbs_short_name']);
 const wbsMap = buildWbsMap(model);          // wbs_id -> wbs record with _full_path
 const { predecessors, successors } = buildPredecessorMap(model);
 const calendars = getCalendarMap(model);    // clndr_id -> parsed calendar info
+const shifted = calendarShiftHours(calendars); // calendars converted on their shifts
 
 // Calendar arithmetic
 const finish = addWorkDays('2024-01-15', 10, calendars['1']);  // adds 10 work days
@@ -145,6 +149,14 @@ Round-trip writer fidelity is verified separately and does run in CI: every fixt
 passes `parseXer(writeXer(parseXer(text)))` byte-identical at the `ermhdr` + `tables`
 level.
 
+## What's new in 0.4
+
+Calendars are read the way P6 schedules on them. Each rule was measured on Primavera P6 Professional 23.12.1's own F9 and is the one [`cpp-xer-parser`](https://github.com/danafitkowski/cpp-xer-parser) v0.4.0 and `cpp-cpm-engine` v2.10.1 apply. `getCalendarMap` can give a calendar a different `hours_per_day`, and an empty record its working days, so `durationHoursToDays` and anything that reads the map's `hours_per_day` or `work_days` directly can move. The working-day arithmetic (`getWorkDaysBetween`, `addWorkDays`, `subtractWorkDays`) already fell back to Monday to Friday for an empty record and counts as before.
+
+- **Hours per day come from the shifts when `day_hr_cnt` disagrees with all of them.** P6 schedules a duration in hours against the calendar's shifts; `day_hr_cnt` ("Hours per Day") only converts hours to days for display. A Monday-Saturday 07:00-17:00 calendar declaring 8 ran a 40 h activity over four days; `durationHoursToDays` gave five and now gives four. When every working day of the week works the same hours H and H is not `day_hr_cnt`, `hours_per_day` is H and the file's figure is kept as `declared_hours_per_day`. A week whose working days work different hours, or an older bare-day encoding that carries no hours, keeps `day_hr_cnt`. Slots count in either field order, and a 00:00 finish is the end of the day.
+- **An empty calendar record is P6's internal Standard.** A record with no `clndr_data` is scheduled Monday to Friday, 08:00-16:00, eight hours a day, with no holidays, whatever `day_hr_cnt` declares: records declaring 10, 6 and 24 hours ran the same days. v0.3.2 gave such a record an empty `work_days` list (the arithmetic then fell back to Monday to Friday) and converted hours at the declared figure, so 40 hours on a record declaring 10 read as four days where P6 schedules five. The entry carries `empty_record: true` and keeps the declared figure as `declared_hours_per_day`.
+- **`calendarShiftHours(calMap)`** lists the calendars whose `hours_per_day` was taken from their shifts: `clndr_id`, `clndr_name`, `hours_per_day`, `declared_hours_per_day`. An empty record is not listed: it has no shifts.
+
 ## What's new in 0.3
 
 - **`parseP6Xml(text, opts)`** — parses a Primavera P6 XML export into the SAME model shape `parseXer` returns (`{ ermhdr, tables, filepath, ... }`), with XML elements mapped to XER table names (`Activity` → `TASK`, `Relationship` → `TASKPRED`, `WBS` → `PROJWBS`, etc.) and enum values translated to XER codes. Downstream helpers (`getTable`, `buildPredecessorMap`, the Lens viewer renderers) work on XML inputs with no source changes. Unmapped fields pass through (never-truncate rule), and `Start`/`Finish` columns are pinned over `Early`/`Planned` on field collisions.
@@ -162,17 +174,17 @@ level.
 
 ## Test count
 
-`npm test` runs 322 tests across 30 files, all passing. Its `pretest` hook generates the
+`npm test` runs 333 tests across 31 files, all passing. Its `pretest` hook generates the
 5000-activity perf fixture and builds `dist/` first; both are gitignored, so a bare
-`npx vitest run` on a fresh clone collects 320 tests and fails 6 of them purely for those
+`npx vitest run` on a fresh clone collects 331 tests and fails 6 of them purely for those
 missing artefacts. Run `npm test`, not `npx vitest run`.
 
-CI runs 312 of the 322, across 29 files
+CI runs 323 of the 333, across 30 files
 (`npx vitest run --exclude "tests/parity/**"`), excluding parity for the reason above.
 
-The 322 are 9 JS↔Python parity comparisons plus a fixture-set pin (10), 9 writer
+The 333 are 9 JS↔Python parity comparisons plus a fixture-set pin (10), 9 writer
 round-trip cases plus 7 other writer tests (16), 5 writer TSV-safety tests, 4 Web Worker
-tests, 3 bundle smoke tests, 1 perf test, and 283 unit tests across the parser, XML
+tests, 3 bundle smoke tests, 1 perf test, and 294 unit tests across the parser, XML
 reader, access helpers, calendars and encoding.
 
 ## License

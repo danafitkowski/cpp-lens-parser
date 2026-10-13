@@ -15,6 +15,7 @@ export { detectBomEncoding } from './encoding.js';
 export {
   parseCalendarData,
   getCalendarMap,
+  calendarShiftHours,
   getWorkDaysBetween,
   addWorkDays,
   subtractWorkDays,

@@ -130,6 +130,73 @@ const RE_TIME_SLOT = /\((?:s\|\d{1,2}:\d{2}\|f|f\|\d{1,2}:\d{2}\|s)\|\d{1,2}:\d{
 const RE_EXCEPTION_SEGMENT = /^\(0\|\|0\(d\|([^)]+)\)/;
 
 /**
+ * The times of one time slot, in either P6 field order: groups 1-4 read a
+ * start-first slot, groups 5-8 a finish-first one (the canonical Python
+ * xer-parser's _TIME_SLOT_TIMES_RE).
+ */
+const RE_TIME_SLOT_TIMES =
+  /\((?:s\|(\d{1,2}):(\d{2})\|f\|(\d{1,2}):(\d{2})|f\|(\d{1,2}):(\d{2})\|s\|(\d{1,2}):(\d{2}))\)/g;
+
+/**
+ * Hours each working weekday's shifts work, from a clndr_data string's
+ * DaysOfWeek block: { weekday 0=Sun..6=Sat: hours }, working days only.
+ *
+ * Slots count in either P6 field order; a finish of 00:00 is midnight at the
+ * end of the day. Empty when the string has no DaysOfWeek block or no day in
+ * it carries a time slot (the older bare-day encodings carry no hours).
+ * Ported from the Python xer-parser's _shift_hours_by_weekday.
+ *
+ * @param {string} clndrDataStr
+ * @returns {Record<number, number>}
+ */
+function _shiftHoursByWeekday(clndrDataStr) {
+  const block = _balancedBlockAfter(clndrDataStr || '', 'DaysOfWeek');
+  if (block === null) return {};
+  const out = {};
+  let i = 0;
+  while (i < block.length) {
+    const m = block.slice(i).match(RE_DAY_SEGMENT);
+    if (!m) {
+      i++;
+      continue;
+    }
+    const dayIdx = parseInt(m[1], 10) - 1;
+    let depth = 0;
+    let j = i;
+    while (j < block.length) {
+      const ch = block[j];
+      if (ch === '(') {
+        depth++;
+      } else if (ch === ')') {
+        depth--;
+        if (depth === 0) {
+          j++;
+          break;
+        }
+      }
+      j++;
+    }
+    let minutes = 0;
+    for (const s of block.slice(i, j).matchAll(RE_TIME_SLOT_TIMES)) {
+      let start;
+      let finish;
+      if (s[1] !== undefined) {
+        start = parseInt(s[1], 10) * 60 + parseInt(s[2], 10);
+        finish = parseInt(s[3], 10) * 60 + parseInt(s[4], 10);
+      } else {
+        finish = parseInt(s[5], 10) * 60 + parseInt(s[6], 10);
+        start = parseInt(s[7], 10) * 60 + parseInt(s[8], 10);
+      }
+      if (finish === 0) finish = 24 * 60;
+      if (finish > start) minutes += finish - start;
+    }
+    if (minutes && dayIdx >= 0 && dayIdx <= 6) out[dayIdx] = minutes / 60;
+    i = j;
+  }
+  return out;
+}
+
+/**
  * Parse the P6 clndr_data field from the CALENDAR table.
  *
  * @param {string} clndrDataStr  Raw clndr_data value (may be empty/null).
@@ -359,6 +426,15 @@ export function parseCalendarData(clndrDataStr) {
  * Each value includes all fields from parseCalendarData plus:
  *   clndr_id, clndr_name, hours_per_day (number), hours_per_week (number).
  *
+ * Two rules P6 schedules by (measured on Primavera P6 Professional 23.12.1's
+ * own F9; the same in cpp-xer-parser v0.4.0 and cpp-cpm-engine v2.10.1):
+ *   - When every working day of the week works the same hours H and
+ *     day_hr_cnt says otherwise, hours_per_day is H, the hours the shifts
+ *     work; the file's figure is kept as declared_hours_per_day.
+ *   - An EMPTY record (no clndr_data) is P6's internal Standard: Monday to
+ *     Friday, eight hours, no holidays, whatever day_hr_cnt declares. It is
+ *     flagged empty_record, with the declared figure in declared_hours_per_day.
+ *
  * @param {object|null} model  Output of parseXer().
  * @returns {Record<string, object>}  Empty object if CALENDAR table is absent.
  */
@@ -370,6 +446,31 @@ export function getCalendarMap(model) {
     const clndrId = cal.clndr_id || '';
     if (!clndrId) continue;
 
+    // An EMPTY record: P6 schedules on its internal Standard, Monday to
+    // Friday 08:00-16:00 with no exceptions, the base calendar's holidays NOT
+    // applied, whatever hours a day the record declares (records declaring
+    // 10, 6 and 24 h ran the same 08:00-16:00 days on P6's F9).
+    if (!String(cal.clndr_data ?? '').trim()) {
+      const declared = parseFloat(cal.day_hr_cnt);
+      cmap[clndrId] = {
+        work_days: [1, 2, 3, 4, 5],
+        work_day_names: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'],
+        holidays: [],
+        special_workdays: [],
+        exceptions: [],
+        hours_per_day: 8,
+        parse_incomplete: false,
+        raw: '',
+        clndr_id: clndrId,
+        clndr_name: cal.clndr_name || '',
+        hours_per_week: 40,
+        p6_fallback: true,
+        empty_record: true,
+        declared_hours_per_day: Number.isFinite(declared) ? declared : 8,
+      };
+      continue;
+    }
+
     const parsed = parseCalendarData(cal.clndr_data || '');
     parsed.clndr_id = clndrId;
     parsed.clndr_name = cal.clndr_name || '';
@@ -378,6 +479,21 @@ export function getCalendarMap(model) {
     const dayHr = cal.day_hr_cnt;
     const dayHrNum = parseFloat(dayHr);
     parsed.hours_per_day = Number.isFinite(dayHrNum) ? dayHrNum : 8;
+
+    // The hours the shifts work, when every working day of the week works the
+    // same and day_hr_cnt says otherwise: P6 schedules on the shifts (a
+    // Monday-Saturday 07:00-17:00 calendar declaring 8 ran 40 h over four days
+    // on its own F9). A week of unequal days keeps day_hr_cnt.
+    const shiftHours = new Set(
+      Object.values(_shiftHoursByWeekday(cal.clndr_data)).map(h => Math.round(h * 1e6) / 1e6)
+    );
+    if (shiftHours.size === 1) {
+      const h = [...shiftHours][0];
+      if (h > 0 && Math.abs(h - parsed.hours_per_day) > 1e-6) {
+        parsed.declared_hours_per_day = parsed.hours_per_day;
+        parsed.hours_per_day = h;
+      }
+    }
 
     // Hours per week — store as number; fall back to 40 when missing/unparsable.
     const weekHr = cal.week_hr_cnt;
@@ -388,6 +504,29 @@ export function getCalendarMap(model) {
   }
 
   return cmap;
+}
+
+/**
+ * The calendars whose hours_per_day was taken from their shifts.
+ *
+ * Each entry: { clndr_id, clndr_name, hours_per_day, declared_hours_per_day }.
+ * Empty when every calendar's shifts work the hours its day_hr_cnt declares
+ * (or its week's working days differ). An empty record also keeps its
+ * declared figure, but it has no shifts: P6 schedules it on its internal
+ * Standard, so it is not listed. Mirrors the Python calendar_shift_hours.
+ *
+ * @param {Record<string, object>} calMap  Output of getCalendarMap().
+ * @returns {Array<{clndr_id: string, clndr_name: string, hours_per_day: number, declared_hours_per_day: number}>}
+ */
+export function calendarShiftHours(calMap) {
+  return Object.values(calMap || {})
+    .filter(c => c && typeof c === 'object' && c.declared_hours_per_day != null && !c.empty_record)
+    .map(c => ({
+      clndr_id: c.clndr_id || '',
+      clndr_name: c.clndr_name || '',
+      hours_per_day: c.hours_per_day,
+      declared_hours_per_day: c.declared_hours_per_day,
+    }));
 }
 
 // ─── Internal arithmetic helpers ──────────────────────────────────────────────
